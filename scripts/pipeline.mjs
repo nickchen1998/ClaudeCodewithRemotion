@@ -16,6 +16,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { generateRecommendations } from "./recommend.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, "..");
@@ -376,6 +377,43 @@ async function main() {
   logger.add(`> 待生成 Remotion composition 後補充`);
   logger.add(``);
 
+  // Step 4: 配樂推薦 & 上架關鍵字
+  console.log(`\n🎵 Step 4：產生配樂推薦與上架關鍵字...\n`);
+  const recommend = await generateRecommendations(scriptJson, analyses);
+
+  fs.writeFileSync(
+    path.join(OUTPUT_DIR, "recommend.json"),
+    JSON.stringify(recommend, null, 2),
+    "utf-8"
+  );
+
+  // Step 4 log
+  logger.add(`## Step 4：配樂推薦 & 上架關鍵字`);
+  logger.add(``);
+  logger.add(`### 🎵 配樂推薦`);
+  logger.add(``);
+  logger.add(`- 氛圍：${recommend.music.mood}`);
+  logger.add(`- 風格：${recommend.music.suggestedGenres.join(", ")}`);
+  logger.add(`- BPM：${recommend.music.bpmRange}`);
+  logger.add(`- 搜尋關鍵字：${recommend.music.searchKeywords.join(", ")}`);
+  logger.add(``);
+  logger.add(`| # | 曲名 | 藝人 | 來源 | 版權 |`);
+  logger.add(`|---|------|------|------|------|`);
+  recommend.music.recommendations.forEach((r, i) => {
+    logger.add(`| ${i + 1} | ${r.track} | ${r.artist} | ${r.source} | ${r.copyrightNote} |`);
+  });
+  logger.add(``);
+  logger.add(`### 🏷️ 上架關鍵字`);
+  logger.add(``);
+  logger.add(`**YouTube Tags:** ${recommend.seo.youtube.tags.join(", ")}`);
+  logger.add(``);
+  logger.add(`**Instagram Hashtags:** ${recommend.seo.instagram.hashtags.join(" ")}`);
+  logger.add(``);
+  if (recommend.seo.tiktok) {
+    logger.add(`**TikTok Hashtags:** ${recommend.seo.tiktok.hashtags.join(" ")}`);
+    logger.add(``);
+  }
+
   // 儲存 markdown
   logger.save();
 
@@ -387,6 +425,13 @@ async function main() {
       `   片段 ${i + 1}: ${s.filename} (${s.durationSeconds}s) - ${s.textZh}`
     );
   });
+
+  // 配樂摘要
+  console.log("\n🎵 配樂推薦：");
+  recommend.music.recommendations.forEach((r, i) => {
+    console.log(`   ${i + 1}. ${r.track} - ${r.artist} (${r.source})`);
+  });
+  console.log(`\n🔍 音樂庫搜尋關鍵字：${recommend.music.searchKeywords.join(", ")}`);
 }
 
 main().catch(console.error);
