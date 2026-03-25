@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment variables (contains API keys)
+.env
+
+# Output files
+out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Raw video footage (too large for git, supports subfolders)
+public/**/*.MOV
+public/**/*.mov
+public/**/*.mp4
+public/**/*.MP4
+
+# Pipeline output (regeneratable, may contain large data)
+scripts/output/
+
+# Auto-generated compositions (created by pipeline per project)
+src/compositions/
+
+# Project logs (contains AI-generated analysis per session)
+logs/*.md
