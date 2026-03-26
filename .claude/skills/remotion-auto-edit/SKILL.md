@@ -1,20 +1,20 @@
 ---
 name: remotion-auto-edit
-description: AI-powered short video auto-editing workflow. Analyzes raw footage with Gemini, generates editing script with OpenAI, builds Remotion composition, renders and outputs social media copy.
+description: AI-powered short video auto-editing workflow. Analyzes raw footage with Gemini, generates editing script with OpenAI, builds Remotion composition, and renders output.
 metadata:
   tags: remotion, video, editing, gemini, openai, short-form, automation
 ---
 
 ## When to use
 
-Use this skill when the user wants to create a short-form video (Reels/TikTok/Shorts) from raw footage using the AI auto-editing pipeline. Trigger keywords: "edit video", "create short", "auto edit", "short video", "remotion edit".
+Use this skill when the user wants to create a short-form video (Reels/TikTok/Shorts) from raw footage using the AI auto-editing pipeline. Trigger keywords: "edit video", "create short", "auto edit", "short video", "remotion edit", "剪輯".
 
 ## Overview
 
 This is a complete AI-powered video editing workflow:
 
 ```
-[Raw Footage] → [Gemini Analyze] → [OpenAI Script] → [Review] → [Remotion Compose] → [Render] → [Social Copy]
+[Raw Footage] → [素材確認] → [使用者標註重點] → [Gemini Analyze] → [討論主題與方向] → [OpenAI Script] → [使用者確認腳本] → [Remotion Compose] → [Render]
 ```
 
 ## Full Workflow
@@ -77,26 +77,11 @@ OPENAI_MODEL="gpt-5.4-nano"
 - Missing `ffprobe` → Tell user to install FFmpeg (`brew install ffmpeg` on macOS)
 - Not a Remotion project → Ask user if they want to initialize one
 
-**Only proceed to Step 0 after all checks pass (✅).**
+**Only proceed to Step 1 after all checks pass (✅).**
 
 ---
 
-### Step 0: Gather Information (Interactive)
-
-Before starting, collect the following from the user:
-
-1. **Project name** - Used for file naming and .md log
-2. **Project folder** - 素材子資料夾名稱（英文 kebab-case，例如 `meiji-shrine`），放在 `public/{project-folder}/`
-3. **Editing direction** - Theme, target audience, style, message
-4. **Video files** - Confirm they are in `public/{project-folder}/`
-5. **File filter** (optional) - Which files to include (default: all .MOV/.mp4)
-
-> **Note**: This replaces the "editing direction document" from the n8n workflow. Always ask the user directly.
-> **Important**: 素材資料夾請使用英文 kebab-case 命名，避免中文路徑造成跨平台相容性問題。
-
----
-
-### Step 1: Verify Source Material
+### Step 1: Verify Source Material & User Annotation
 
 Before calling any AI API:
 
@@ -111,9 +96,21 @@ for f in public/{project-folder}/*.MOV public/{project-folder}/*.mp4; do
 done
 ```
 
+**列出所有檔案後，詢問使用者：**
+
+以表格形式列出所有素材檔案（檔名 + 時長），然後問使用者：
+
+> 「以上是所有的素材檔案，請問有沒有哪幾支影片你希望 AI 分析時特別著重提取的部分？例如某支影片的特定秒數、特定畫面等。如果沒有的話，回覆『沒有』即可，我會全部按預設方式分析。」
+
+- 如果使用者有標註 → 記錄下來，在 Step 2 的 Gemini prompt 中加入對應的著重指示
+- 如果使用者回覆「沒有」→ 直接進入 Step 2
+
+> **Important**: 素材資料夾請使用英文 kebab-case 命名，避免中文路徑造成跨平台相容性問題。
+
 **Checkpoint:**
 - [ ] All video files are present in `public/{project-folder}/`
-- [ ] Recorded actual duration of each source file (will need this in Step 4)
+- [ ] Recorded actual duration of each source file (will need this in Step 5)
+- [ ] User annotation collected (or confirmed none needed)
 
 ---
 
@@ -124,6 +121,11 @@ Run the pipeline script or call Gemini API directly to analyze each video.
 **Prompt template for Gemini:**
 ```
 請使用繁體中文替我分析這個影片的內容，請使用秒為單位分析每個區間的畫面，方便後續我進行影片剪輯，產出的說明文字請大約落在 300 字以內。
+```
+
+如果使用者在 Step 1 有標註特定檔案的著重內容，在該檔案的 prompt 中追加：
+```
+請特別注意並詳細描述以下部分：[使用者標註的內容]
 ```
 
 **Prompt tuning notes:**
@@ -139,15 +141,38 @@ Run the pipeline script or call Gemini API directly to analyze each video.
 
 ---
 
-### Step 3: OpenAI Script Generation
+### Step 3: Discuss Editing Direction with User (Interactive)
 
-Send all analyses + editing direction to OpenAI to generate the structured editing script.
+分析完成後，**先根據分析結果主動向使用者提案**，再確認剪輯方向。
+
+**流程：**
+
+1. 根據 Gemini 分析結果，整理出：
+   - **建議的影片主題**（1-2 個方向）
+   - **建議的敘事流程**（哪支影片先、哪支後，大致的故事線）
+   - **預估總時長**
+
+2. 將以上建議呈現給使用者，同時詢問：
+   > 「以上是我根據分析結果建議的主題和流程。請問你想剪輯成什麼樣的影片？有沒有特定的主題或敘事方式？如果覺得我的建議 OK，直接回覆『OK』就可以開始下一步了。」
+
+3. **等待使用者確認：**
+   - 使用者回覆 OK / 接受 → 進入 Step 4
+   - 使用者有不同想法 → 繼續討論，調整主題和流程方向，直到使用者確認為止
+
+**重點：這一步不能跳過，必須取得使用者明確同意才能進入腳本生成。**
+
+---
+
+### Step 4: OpenAI Script Generation
+
+Send all analyses + confirmed editing direction to OpenAI to generate the structured editing script.
 
 **System prompt key points:**
 - Role: Senior short-form video director
 - Must use ONLY filenames that exist in the input data
 - Total duration should match the target (e.g., 30-60 seconds)
 - Output format must be strictly followed
+- 融入使用者在 Step 3 確認的主題和敘事方向
 
 **Output format per segment:**
 ```
@@ -174,7 +199,7 @@ Send all analyses + editing direction to OpenAI to generate the structured editi
 
 ---
 
-### Step 4: Duration Validation (CRITICAL)
+### Step 5: Duration Validation (CRITICAL)
 
 **This is the most common source of bugs.** Compare script segment durations against actual source video durations.
 
@@ -200,14 +225,17 @@ actualFrames = sum(all segment frames) - (number of non-"none" transitions × TR
 
 ---
 
-### Step 5: Review Script with User
+### Step 6: Review Script with User (Interactive)
 
-Before generating the Remotion composition, present the script to the user:
+腳本生成完畢後，展示給使用者確認：
 
-1. Show the segment summary table (filename, duration, subtitle, style, transition)
-2. Ask if any subtitles need adjustment
-3. Ask if the ordering makes sense
-4. Ask about style preferences (subtitle colors, etc.)
+1. 以表格呈現每個片段的摘要（檔名、時長、字幕、風格、轉場）
+2. 詢問使用者：
+   > 「以上是生成的剪輯腳本，請確認字幕內容、順序、轉場等是否需要調整。沒問題的話回覆『OK』，我就開始進行剪輯。」
+
+3. **等待使用者確認：**
+   - 使用者回覆 OK → 進入 Step 7
+   - 使用者有調整需求 → 討論並修改腳本，直到使用者確認為止
 
 **Common adjustments:**
 - Subtitle wording (AI-generated text may not match user's intent)
@@ -217,7 +245,7 @@ Before generating the Remotion composition, present the script to the user:
 
 ---
 
-### Step 6: Generate Remotion Composition
+### Step 7: Generate Remotion Composition & Render
 
 Create/update the composition file in **`src/compositions/`** (NOT `src/` root).
 
@@ -239,43 +267,17 @@ Create/update the composition file in **`src/compositions/`** (NOT `src/` root).
 - `info`: `rgba(0,0,0, 0.7)` - Slightly darker
 - `highlight`: `rgba(0,0,0, 0.75)` - Emphasis (NOT red)
 
----
-
-### Step 7: Render Output
+**Render:**
 
 ```bash
 npx remotion render [CompositionId] out/[output-name].mp4
 ```
 
-After render completes, **一次告知使用者以下所有資訊**：
-
+After render completes,告知使用者：
 1. 輸出檔案路徑、大小、時長
-2. **Instagram Reels 標題**（簡短有吸引力，含 1-2 個 emoji）
-3. **Instagram Reels 描述**（重點條列 + hashtag，hashtag 最多 5 個）
-4. 提醒使用者去查看輸出的影片檔案
+2. 提醒使用者去查看輸出的影片檔案
 
-**Instagram 文案格式範例：**
-```
-📌 標題：明治神宮參拜攻略⛩️ 30秒帶你走一遍
-
-📝 描述：
-從原宿站出發，跟著我走一趟明治神宮 🌿
-
-✨ 重點整理：
-・求籤不是抽吉凶，而是天皇的「和歌」教誨
-・大御心初穗料 ¥100
-・籤詩背面有英文翻譯
-
-#明治神宮 #東京旅遊 #原宿 #日本神社 #旅遊攻略
-```
-
-**文案撰寫規則：**
-- 標題控制在 30 字以內
-- 描述以條列式為主，方便閱讀
-- Hashtag 固定 5 個，選擇與主題最相關的
-- 語氣輕鬆親切，適合 Instagram 受眾
-
-同時將以上資訊寫入 `logs/` 目錄下的紀錄 `.md` 檔。
+同時將輸出資訊寫入 `logs/` 目錄下的紀錄 `.md` 檔。
 
 ---
 
@@ -294,6 +296,20 @@ If issues found, go back to the relevant step and fix.
 
 ---
 
+### Optional: Social Media Copy
+
+如果使用者主動要求產生社群文案，才進行此步驟。
+
+**Instagram 文案格式：**
+- 標題控制在 30 字以內（簡短有吸引力，含 1-2 個 emoji）
+- 描述以條列式為主，方便閱讀
+- Hashtag 固定 5 個，選擇與主題最相關的
+- 語氣輕鬆親切，適合 Instagram 受眾
+
+將文案資訊一併寫入 `logs/` 的紀錄檔與 `scripts/output/script.json`。
+
+---
+
 ## Pipeline Script
 
 The automated pipeline script is at `scripts/pipeline.mjs`:
@@ -309,7 +325,7 @@ node scripts/pipeline.mjs \
 - `--project`: 對應 `public/` 下的子資料夾名稱（英文 kebab-case）
 - pipeline 會自動在 script.json 的 filename 加上子資料夾路徑，確保 `staticFile()` 能正確找到檔案
 
-This handles Steps 2-3 automatically and outputs:
+This handles Steps 2 & 4 automatically and outputs:
 - `scripts/output/analyses.json` - Gemini analysis results
 - `scripts/output/script-raw.txt` - Raw OpenAI script
 - `scripts/output/script.json` - Structured JSON for Remotion

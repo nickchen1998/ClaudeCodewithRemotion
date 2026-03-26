@@ -1,5 +1,6 @@
 import { Composition } from "remotion";
 import { MeijiShrine } from "./compositions/MeijiShrine";
+import { NangangWorkWay } from "./compositions/NangangWorkWay";
 
 const FPS = 30;
 
@@ -27,6 +28,14 @@ export const RemotionRoot = () => {
         id="MeijiShrine"
         component={MeijiShrine}
         durationInFrames={60 * FPS}
+        fps={FPS}
+        width={1080}
+        height={1920}
+      />
+      <Composition
+        id="NangangWorkWay"
+        component={NangangWorkWay}
+        durationInFrames={594}
         fps={FPS}
         width={1080}
         height={1920}

@@ -9,6 +9,8 @@
     "render:meiji": "remotion render MeijiShrine --codec h264-mkv",
     "build": "remotion render TaibaSumidariver out/shorts.mp4",
     "build:meiji": "remotion render MeijiShrine out/meiji-shrine.mp4",
+    "render:nangang": "remotion render NangangWorkWay --codec h264-mkv",
+    "build:nangang": "remotion render NangangWorkWay out/nangang-work-way.mp4",
     "recommend": "node scripts/recommend.mjs"
   },
   "keywords": [],
